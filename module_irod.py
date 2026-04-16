@@ -14,9 +14,10 @@ from module_odea import pseudo_inverse_RIOD, quadratic_eigenvalue_RIOD
 from module_tbp import TBP, TBP_dynamics
 from module_measurements import process_los_with_noise, generate_polynomials, get_stm_stt_coefficients, \
     skew_symmetric_matrix, mahalanobis_distance, spectral_norm_upper_left_3x3
-from module_optimization import RIOD_convex_optimization, RIOD_convex_optimization_weighted
-from module_constrained_optimization import RIOD_convex_constrained_optimization, \
-    RIOD_convex_constrained_optimization_weighted
+from module_optimization import RIOD_convex_optimization
+from module_constrained_optimization import RIOD_convex_constrained_optimization
+from module_optimization_weight import RIOD_convex_optimization_weighted
+from module_constrained_optimization_weight import RIOD_convex_constrained_optimization_weighted
 
 warnings.filterwarnings("ignore")
 RelTol = 1e-12
@@ -294,6 +295,7 @@ def recursive_optimization_method(
         ifPrint: bool = True,
         if_first_order_cost: bool = True,
         if_add_weights: bool = False,
+        weight_strategy: int = 0,  # 0: original OLOD, 1: inverse-distance, 2: 2D tangent-plane
         if_add_constraints: bool = False,
         minimal_distance: float = 1e-3,
         residual_order: float = 0.5,
@@ -350,6 +352,7 @@ def recursive_optimization_method(
                     Maps=Maps,
                     los_vectors=los_vectors,
                     R=R,
+                    weight_strategy=weight_strategy,
                     ifPrint=ifPrint,
                     if_first_order_cost=if_first_order_cost,
                 )
@@ -373,6 +376,7 @@ def recursive_optimization_method(
                     Maps=Maps,
                     los_vectors=los_vectors,
                     R=R,
+                    weight_strategy=weight_strategy,
                     ifPrint=ifPrint,
                     if_first_order_cost=if_first_order_cost,
                     minimal_distance=minimal_distance,

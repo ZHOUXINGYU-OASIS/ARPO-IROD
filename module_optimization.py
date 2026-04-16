@@ -118,8 +118,7 @@ def RIOD_convex_optimization_weighted(
         if_first_order_cost: bool = True,
         residual_order: float = 0.5,
 ) -> np.array:
-    """Solve for the closest point using the convex optimization"""
-    """With weights"""
+    """Solve for the closest point using the convex optimization (using weighting strategy)"""
     num_observations = len(los_vectors)
     DIM = 6
     DIMz = 3

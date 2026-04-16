@@ -1,4 +1,7 @@
 import numpy as np
+from contextlib import contextmanager
+import joblib
+from tqdm import tqdm
 import random
 import math
 import warnings
@@ -14,14 +17,70 @@ from daceypy import DA, array, ADS
 from module_irod import setup_seed, get_flyby_scenario, get_formation_scenario
 from module_nlsp import optimal_linear_orbit_determination, nonlinear_least_squares_orbit_determination
 from module_measurements import generate_polynomials, get_stm_stt_coefficients
-from module_optimization import RIOD_convex_optimization, RIOD_convex_optimization_weighted
-from module_constrained_optimization import RIOD_convex_constrained_optimization, \
-    RIOD_convex_constrained_optimization_weighted
+from module_optimization import RIOD_convex_optimization
+from module_constrained_optimization import RIOD_convex_constrained_optimization
+from module_optimization_weight import RIOD_convex_optimization_weighted
+from module_constrained_optimization_weight import RIOD_convex_constrained_optimization_weighted
 
 warnings.filterwarnings("ignore")
 RelTol = 1e-12
 AbsTol = 1e-12
 default_std = 1e-4
+
+def example_run():
+    """An example"""
+    order = 5
+    default_std = 1e-4
+    weight_strategy: int = 0  # 0: original OLOD, 1: inverse-distance, 2: 2D tangent-plane
+    xc0, xd0, t_series, los_vectors, f, ft, chief_states, deputy_states, R = get_flyby_scenario(
+        num_observations=10,
+        factor=10.0,
+        revolution=1.0,
+        std=default_std,
+        if_add_noises=True,
+        if_set_seed=True,
+        seed=42,
+    )
+    dx0, solution, AE, RE, solutions_history, _, time_costs, minimal_distance, residuals = adaptive_recursive_optimization_method(
+        xc0=xc0,
+        xd0=xd0,
+        R=R["LOS"],
+        t_series=t_series,
+        los_vectors=los_vectors,
+        ft=ft,
+        order=order,
+        polynomials=None,
+        max_iteration=100,
+        eps=1e-8,
+        constraints_bound=np.array([1e-3, 3e-3, 1e-1]),
+        ifPrint=False,
+        if_first_order_cost=True,
+        if_add_weights=False,
+        weight_strategy=weight_strategy,
+    )
+    initial_guess = xc0 + dx0
+    """Implement ROD"""
+    # refined_guess, estimated_states, _, iteration, _, _, time_cost, flag = optimal_linear_orbit_determination(
+    #     initial_guess=initial_guess,
+    #     t_series=t_series,
+    #     chief_states=chief_states,
+    #     deputy_states=deputy_states,
+    #     los_vectors=los_vectors,
+    #     f=f,
+    #     ft=ft,
+    #     order=order,
+    # )
+    refined_guess, estimated_states, _, iteration, _, _, time_cost, flag = nonlinear_least_squares_orbit_determination(
+        initial_guess=initial_guess,
+        t_series=t_series,
+        chief_states=chief_states,
+        deputy_states=deputy_states,
+        los_vectors=los_vectors,
+        f=f,
+        ft=ft,
+        order=order,
+    )
+    return refined_guess, estimated_states, iteration, time_cost, flag
 
 def first_step_optimization(
         xc0: np.array,
@@ -39,6 +98,7 @@ def first_step_optimization(
         ifPrint: bool = True,
         if_first_order_cost: bool = True,
         if_add_weights: bool = False,
+        weight_strategy: int = 0,  # 0: original OLOD, 1: inverse-distance, 2: 2D tangent-plane
         residual_order: float = 0.5,
 ) -> tuple[np.array, np.array, np.array, np.array, np.array, int, float]:
     """First-step optimization method for initial relative orbit determination"""
@@ -94,6 +154,7 @@ def first_step_optimization(
                 Maps=Maps,
                 los_vectors=los_vectors,
                 R=R,
+                weight_strategy=weight_strategy,
                 ifPrint=ifPrint,
                 if_first_order_cost=if_first_order_cost,
                 minimal_distance=minimal_distance,
@@ -131,6 +192,7 @@ def second_step_optimization(
         ifPrint: bool = True,
         if_first_order_cost: bool = True,
         if_add_weights: bool = False,
+        weight_strategy: int = 0,  # 0: original OLOD, 1: inverse-distance, 2: 2D tangent-plane
         residual_order: float = 0.5,
 ) -> tuple[np.array, np.array, np.array, np.array, np.array, int, float]:
     """Second-step optimization method for initial relative orbit determination"""
@@ -183,6 +245,7 @@ def second_step_optimization(
                 Maps=Maps,
                 los_vectors=los_vectors,
                 R=R,
+                weight_strategy=weight_strategy,
                 ifPrint=ifPrint,
                 if_first_order_cost=if_first_order_cost,
             )
@@ -219,6 +282,7 @@ def adaptive_recursive_optimization_method(
         ifPrint: bool = True,
         if_first_order_cost: bool = True,
         if_add_weights: bool = False,
+        weight_strategy: int = 0,  # 0: original OLOD, 1: inverse-distance, 2: 2D tangent-plane
         residual_order: float = 0.5,
 ) -> tuple[np.array, np.array, np.array, np.array, np.array, int, np.array, float, np.array]:
     """Adaptive recursive optimization method for initial relative orbit determination"""
@@ -275,6 +339,7 @@ def adaptive_recursive_optimization_method(
             ifPrint=ifPrint,
             if_first_order_cost=if_first_order_cost,
             if_add_weights=if_add_weights,
+            weight_strategy=weight_strategy,
             residual_order=residual_order,
         )
         time_costs[1] += time_cost
@@ -305,6 +370,7 @@ def adaptive_recursive_optimization_method(
             ifPrint=ifPrint,
             if_first_order_cost=if_first_order_cost,
             if_add_weights=if_add_weights,
+            weight_strategy=weight_strategy,
             residual_order=residual_order,
         )
         time_costs[1] += time_cost
@@ -348,53 +414,5 @@ def adaptive_recursive_optimization_method(
 
 if __name__ == "__main__":
     """Main function"""
-    order = 5
-    default_std = 1e-4
-    xc0, xd0, t_series, los_vectors, f, ft, chief_states, deputy_states, R = get_flyby_scenario(
-        num_observations=10,
-        factor=10.0,
-        revolution=1.0,
-        std=default_std,
-        if_add_noises=True,
-        if_set_seed=True,
-        seed=42,
-    )
-    dx0, solution, AE, RE, solutions_history, _, time_costs, minimal_distance, residuals = adaptive_recursive_optimization_method(
-        xc0=xc0,
-        xd0=xd0,
-        R=R["LOS"],
-        t_series=t_series,
-        los_vectors=los_vectors,
-        ft=ft,
-        order=order,
-        polynomials=None,
-        max_iteration=100,
-        eps=1e-8,
-        constraints_bound=np.array([1e-3, 3e-3, 1e-1]),
-        ifPrint=False,
-        if_first_order_cost=True,
-        if_add_weights=False,
-    )
-    initial_guess = xc0 + dx0
-    """Implement ROD"""
-    # refined_guess, estimated_states, _, iteration, _, _, time_cost, flag = optimal_linear_orbit_determination(
-    #     initial_guess=initial_guess,
-    #     t_series=t_series,
-    #     chief_states=chief_states,
-    #     deputy_states=deputy_states,
-    #     los_vectors=los_vectors,
-    #     f=f,
-    #     ft=ft,
-    #     order=order,
-    # )
-    refined_guess, estimated_states, _, iteration, _, _, time_cost, flag = nonlinear_least_squares_orbit_determination(
-        initial_guess=initial_guess,
-        t_series=t_series,
-        chief_states=chief_states,
-        deputy_states=deputy_states,
-        los_vectors=los_vectors,
-        f=f,
-        ft=ft,
-        order=order,
-    )
+    example_run()
 

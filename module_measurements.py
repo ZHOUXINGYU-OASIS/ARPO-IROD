@@ -236,14 +236,3 @@ def handle_singular_weight_matrix(
     eigvals[eigvals <= threshold] = threshold
     W_new = eigvecs @ np.diag(eigvals) @ eigvecs.T
     return W_new
-
-# def handle_singular_weight_matrix(
-#         W: np.array,
-# ) -> np.array:
-#     """The weight matrix is singular"""
-#     eigvals, eigvecs = np.linalg.eigh(W)
-#     abs_sorted_indices = np.argsort(abs(eigvals))
-#     min1_idx, min2_idx = abs_sorted_indices[:2]
-#     eigvals[min1_idx] = abs(eigvals[min2_idx]) / 1e2
-#     W_new = eigvecs @ np.diag(eigvals) @ eigvecs.T
-#     return W_new
